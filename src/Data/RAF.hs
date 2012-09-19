@@ -59,7 +59,7 @@ data PathListEntry = PathListEntry
     } deriving (Show)
 
 parseFromFile :: FilePath -> IO (Either String RAF)
-parseFromFile fn = flip parse <$> B.readFile fn
+parseFromFile fn = parse <$> B.readFile fn
 
 parse :: ByteString -> Either String RAF
 parse s = A.parseOnly raf s

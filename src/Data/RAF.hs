@@ -120,8 +120,8 @@ parse s = A.parseOnly raf s
     anyWord64 = anyWordN pack
 
     wordN :: Bits a => (a -> B.ByteString) -> a -> Parser a
-    wordN f v | isBigEndian = A.string (B.reverse $ f v) >> return v
-              | otherwise   = A.string (            f v) >> return v
+    wordN f v | isBigEndian = A.string (            f v) >> return v
+              | otherwise   = A.string (B.reverse $ f v) >> return v
 
     word16 :: Word16 -> Parser Word16
     word16 = wordN unpack

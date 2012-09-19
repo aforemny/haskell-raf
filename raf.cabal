@@ -1,7 +1,19 @@
 name:                raf
 version:             0.0.0.0
--- synopsis:            
--- description:         
+synopsis:            A Library dealing with the Riot Archive File (RAF) format.
+description:         A low level library dealing with the Riot Archive File
+                     (RAF) format. This is a file format heavily featured in
+                     the video game League of Legends. If you are looking for a
+                     library to decode RAF images this is not the library for
+                     you.
+                     
+                     As of now the library supports parsing of RAF files into a
+                     basic data type independent of the endianness of the host
+                     machine. The endianness of the file is fixed by the file
+                     format description.
+
+                     Generation of RAF files is not supported although this
+                     feature will most likely be added eventually.
 license:             BSD3
 license-file:        LICENSE
 author:              Alexander Foremny

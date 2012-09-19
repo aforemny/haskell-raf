@@ -64,27 +64,17 @@ parseFromFile fn = parse <$> B.readFile fn
 parse :: ByteString -> Either String RAF
 parse s = A.parseOnly raf s
   where
-    raf = do
-        magicNumber    <- word32 0x18be0ef0
-        version        <- anyWord32
-        managerIndex   <- anyWord32
-        fileListOffset <- anyWord32
-        pathListOffset <- anyWord32
-        fileList       <- fileList
-        pathList       <- pathList
-        return $ RAF magicNumber version managerIndex fileListOffset
-                     pathListOffset fileList pathList
+    raf = RAF <$> (word32 0x18be0ef0)
+              <*> anyWord32 <*> anyWord32
+              <*> anyWord32 <*> anyWord32
+              <*> fileList  <*> pathList
+
     fileList = do
         numberOfEntries <- anyWord32
         fileEntries     <- A.count (fromIntegral numberOfEntries) fileEntry
         return $ FileList numberOfEntries fileEntries
 
-    fileEntry = do
-        pathHash      <- take 4
-        dataOffset    <- anyWord32
-        dataSize      <- anyWord32
-        pathListIndex <- anyWord32
-        return $ FileEntry pathHash dataOffset dataSize pathListIndex
+    fileEntry = FileEntry <$> take 4 <*> anyWord32 <*> anyWord32 <*> anyWord32
 
     pathList = do
         pathListSize    <- anyWord32
@@ -93,10 +83,7 @@ parse s = A.parseOnly raf s
         pathStrings     <- A.takeWhile (const True)
         return $ PathList pathListSize pathListCount pathListEntries
                           pathStrings
-    pathListEntry = do
-         pathOffset <- anyWord32
-         pathLength <- anyWord32
-         return $ PathListEntry pathOffset pathLength
+    pathListEntry = PathListEntry <$> anyWord32 <*> anyWord32
 
     take :: Int -> Parser ByteString
     take n | isBigEndian    = B.reverse <$> A.take n

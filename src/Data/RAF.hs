@@ -80,7 +80,7 @@ parseFromFile :: FilePath -> IO (Either String RAF)
 parseFromFile fn = parse <$> B.readFile fn
 
 parse :: ByteString -> Either String RAF
-parse s = A.parseOnly raf s
+parse = A.parseOnly raf
   where
     raf = RAF <$> (word32 0x18be0ef0)
               <*> anyWord32 <*> anyWord32
@@ -115,27 +115,15 @@ parse s = A.parseOnly raf s
             | isBigEndian = f . B.reverse <$> A.take (byteSize d)
             | otherwise   = f             <$> A.take (byteSize d)
 
-    anyWord16 :: Parser Word16
-    anyWord16 = anyWordN pack
-
     anyWord32 :: Parser Word32
     anyWord32 = anyWordN pack
-
-    anyWord64 :: Parser Word64
-    anyWord64 = anyWordN pack
 
     wordN :: Bits a => (a -> B.ByteString) -> a -> Parser a
     wordN f v | isBigEndian = A.string (            f v) >> return v
               | otherwise   = A.string (B.reverse $ f v) >> return v
 
-    word16 :: Word16 -> Parser Word16
-    word16 = wordN unpack
-
     word32 :: Word32 -> Parser Word32
     word32 = wordN unpack
-
-    word64 :: Word64 -> Parser Word64
-    word64 = wordN unpack
 
     pack :: Bits a => ByteString -> a
     pack = B.foldl' (\n h -> (n `shiftL` 8) .|. fromIntegral h) 0

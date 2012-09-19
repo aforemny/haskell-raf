@@ -58,11 +58,11 @@ data PathListEntry = PathListEntry
     , pathLength :: Word32
     } deriving (Show)
 
-parseFromFile :: FilePath -> Endianness -> IO (Either String RAF)
-parseFromFile fn en = flip parse en <$> B.readFile fn
+parseFromFile :: FilePath -> IO (Either String RAF)
+parseFromFile fn = flip parse <$> B.readFile fn
 
-parse :: ByteString -> Endianness -> Either String RAF
-parse s en = A.parseOnly raf s
+parse :: ByteString -> Either String RAF
+parse s = A.parseOnly raf s
   where
     raf = do
         magicNumber    <- word32 0x18be0ef0
@@ -99,16 +99,16 @@ parse s en = A.parseOnly raf s
          return $ PathListEntry pathOffset pathLength
 
     take :: Int -> Parser ByteString
-    take n | en == LittleEndian = A.take n
-           | otherwise          = B.reverse <$> A.take n
+    take n | isBigEndian    = B.reverse <$> A.take n
+           | otherwise = A.take n
 
     anyWordN :: Bits a => (ByteString -> a) -> Parser a
     anyWordN = anyWordN' undefined
       where
         anyWordN' :: Bits a => a -> (ByteString -> a) -> Parser a
         anyWordN' d f
-            | en == LittleEndian = f             <$> A.take (byteSize d)
-            | otherwise          = f . B.reverse <$> A.take (byteSize d)
+            | isBigEndian = f . B.reverse <$> A.take (byteSize d)
+            | otherwise   = f             <$> A.take (byteSize d)
 
     anyWord16 :: Parser Word16
     anyWord16 = anyWordN pack
@@ -120,8 +120,8 @@ parse s en = A.parseOnly raf s
     anyWord64 = anyWordN pack
 
     wordN :: Bits a => (a -> B.ByteString) -> a -> Parser a
-    wordN f v | en == BigEndian    = A.string (B.reverse $ f v) >> return v
-              | otherwise          = A.string (            f v) >> return v
+    wordN f v | isBigEndian = A.string (B.reverse $ f v) >> return v
+              | otherwise   = A.string (            f v) >> return v
 
     word16 :: Word16 -> Parser Word16
     word16 = wordN unpack
@@ -141,4 +141,7 @@ parse s en = A.parseOnly raf s
 
     byteSize :: Bits a => a -> Int
     byteSize = (`div` 8) . bitSize
+
+    isBigEndian :: Bool
+    isBigEndian = getSystemEndianness == BigEndian
 

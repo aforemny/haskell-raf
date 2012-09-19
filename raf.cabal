@@ -26,9 +26,10 @@ cabal-version:       >=1.8
 library
   exposed-modules:     Data.RAF
   hs-source-dirs:      src
-  build-depends:       attoparsec == 0.10.*,
-                       base       == 4.5.*,
-                       bytestring == 0.9.*,
-                       cpu        == 0.1.*
+  build-depends:       attoparsec        == 0.10.*,
+                       attoparsec-binary == 0.1.*,
+                       base              == 4.5.*,
+                       bytestring        == 0.9.*,
+                       cpu               == 0.1.*
   ghc-options:         -Wall
 

@@ -8,13 +8,9 @@
 -- description. There is some fiddling with endianness which has not been
 -- tested extensively. Literal values, e.g. the magic number, are encoded in
 -- big endian. Thus, conversion of arguments of some parser functions have to
--- take this into account, c.f. wordN.
+-- take this into account.
 --
 -- <http://leagueoflegends.wikia.com/wiki/RAF:_Riot_Archive_File>
---
--- Some code is copied verbatim from the attoparsec-binary package.
---
--- <http://hackage.haskell.org/package/attoparsec-binary>
 
 module Data.RAF
     ( 
@@ -33,6 +29,7 @@ module Data.RAF
 import           Prelude hiding (take)
 
 import           Control.Applicative
+import           Data.Attoparsec.Binary
 import           Data.Attoparsec      (Parser)
 import           Data.Bits
 import           Data.ByteString      (ByteString)
@@ -45,7 +42,7 @@ import qualified Data.Attoparsec as A
 data RAF = RAF
     { magicNumber     :: Word32
     , version         :: Word32
-    , mangerIndex     :: Word32
+    , managerIndex    :: Word32
     , fileListOffset  :: Word32
     , pathListOffset  :: Word32
     , fileList        :: FileList
@@ -82,10 +79,21 @@ parseFromFile fn = parse <$> B.readFile fn
 parse :: ByteString -> Either String RAF
 parse = A.parseOnly raf
   where
-    raf = RAF <$> (word32 0x18be0ef0)
-              <*> anyWord32 <*> anyWord32
-              <*> anyWord32 <*> anyWord32
-              <*> fileList  <*> pathList
+    raf = do
+        magicNumber    <- word32 0x18be0ef0
+        version        <- anyWord32
+        managerIndex   <- anyWord32
+        fileListOffset <- anyWord32
+        pathListOffset <- anyWord32
+        let fileListSkip = fromIntegral fileListOffset - 20
+        _              <- A.take fileListSkip
+        fileList       <- fileList
+        let pathListSkip = fromIntegral pathListOffset
+                         - (24 + 20 * (fromIntegral $ numberOfEntries fileList))
+        _              <- A.take pathListSkip
+        pathList       <- pathList
+        return $ RAF magicNumber version managerIndex fileListOffset
+                     pathListOffset fileList pathList
 
     fileList = do
         numberOfEntries <- anyWord32
@@ -104,26 +112,16 @@ parse = A.parseOnly raf
     pathListEntry = PathListEntry <$> anyWord32 <*> anyWord32
 
     take :: Int -> Parser ByteString
-    take n | isBigEndian    = B.reverse <$> A.take n
-           | otherwise = A.take n
-
-    anyWordN :: Bits a => (ByteString -> a) -> Parser a
-    anyWordN = anyWordN' undefined
-      where
-        anyWordN' :: Bits a => a -> (ByteString -> a) -> Parser a
-        anyWordN' d f
-            | isBigEndian = f . B.reverse <$> A.take (byteSize d)
-            | otherwise   = f             <$> A.take (byteSize d)
+    take n | isBigEndian = B.reverse <$> A.take n
+           | otherwise   = A.take n
 
     anyWord32 :: Parser Word32
-    anyWord32 = anyWordN pack
-
-    wordN :: Bits a => (a -> B.ByteString) -> a -> Parser a
-    wordN f v | isBigEndian = A.string (            f v) >> return v
-              | otherwise   = A.string (B.reverse $ f v) >> return v
+    anyWord32 | isBigEndian = anyWord32be
+              | otherwise   = anyWord32le
 
     word32 :: Word32 -> Parser Word32
-    word32 = wordN unpack
+    word32 w | isBigEndian = word32be w
+             | otherwise   = word32le w
 
     pack :: Bits a => ByteString -> a
     pack = B.foldl' (\n h -> (n `shiftL` 8) .|. fromIntegral h) 0

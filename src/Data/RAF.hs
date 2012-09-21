@@ -1,4 +1,5 @@
 {-# LANGUAGE DoRec #-}
+
 -- | This module provides some low level abstraction on Riot Archive Format
 -- (RAF) files. This format is used by Riot Games Inc. most notably in their
 -- game League of Legends. In case you are looking for a library to deal with

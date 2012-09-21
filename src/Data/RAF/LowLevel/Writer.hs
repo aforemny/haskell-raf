@@ -1,5 +1,3 @@
-{-# LANGUAGE DoRec #-}
-
 module Data.RAF.LowLevel.Writer
     ( 
 
@@ -8,19 +6,12 @@ module Data.RAF.LowLevel.Writer
 
     ) where
 
-import           Prelude hiding (take)
-
-import           Control.Applicative
-import           Control.Monad
-import           Data.Attoparsec.Binary
 import           Data.Bits
 import           Data.ByteString         ( ByteString )
 import           Data.RAF.LowLevel.Types
-import           Data.Word
 import           System.Endian
 
 import qualified Data.ByteString as B
-import qualified Data.Attoparsec as A
 
 writeToFile :: FilePath -> RAF -> IO ()
 writeToFile fn = B.writeFile fn . write

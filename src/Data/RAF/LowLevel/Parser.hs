@@ -1,5 +1,3 @@
-{-# LANGUAGE DoRec #-}
-
 module Data.RAF.LowLevel.Parser
     ( 
 
@@ -8,13 +6,10 @@ module Data.RAF.LowLevel.Parser
 
     ) where
 
-import           Prelude hiding (take)
-
 import           Control.Applicative
 import           Control.Monad
 import           Data.Attoparsec.Binary
 import           Data.Attoparsec         ( Parser )
-import           Data.Bits
 import           Data.ByteString         ( ByteString )
 import           Data.RAF.LowLevel.Types
 import           Data.Word
@@ -47,7 +42,7 @@ parse bs = do
                                              (fileEntry numberOfEntries)
 
     fileEntry numberOfEntries = do
-        pathHash      <- take 4
+        pathHash      <- A.take 4
         dataOffset    <- anyWord32
         dataSize      <- anyWord32
         pathListIndex <- anyWord32
@@ -64,9 +59,9 @@ parse bs = do
 
     pathListEntry = PathListEntry <$> anyWord32 <*> anyWord32
 
-    take :: Int -> Parser ByteString
+    {-take :: Int -> Parser ByteString
     take n | isBigEndian = B.reverse <$> A.take n
-           | otherwise   = A.take n
+           | otherwise   = A.take n-}
 
     anyWord32 :: Parser Word32
     anyWord32 | isBigEndian = anyWord32be
@@ -75,52 +70,6 @@ parse bs = do
     word32 :: Word32 -> Parser Word32
     word32 w | isBigEndian = word32be w
              | otherwise   = word32le w
-
-    isBigEndian :: Bool
-    isBigEndian = getSystemEndianness == BigEndian
-
-writeToFile :: FilePath -> RAF -> IO ()
-writeToFile fn = B.writeFile fn . write
-
-write :: RAF -> ByteString
-write raf = B.concat
-    $ map (unpack . flip ($) raf) [ magicNumber, version, managerIndex
-                                  , fileListOffset, pathListOffset ]
-    ++ [writeFL (fileList raf), writePL (pathList raf)]
-  where
-    writeFL :: FileList -> ByteString
-    writeFL fl = B.concat $ [ unpack (numberOfEntries fl) ]
-                         ++ map writeFE (fileEntries fl)
-
-    writeFE :: FileEntry -> ByteString
-    writeFE fe = B.concat [ pathHash fe
-                          , dump unpack [ dataOffset, dataSize, pathListIndex ]
-                            fe ]
-
-    writePL :: PathList -> ByteString
-    writePL pl = B.concat $ [ unpack   (pathListSize    pl)
-                            , unpack   (pathListCount   pl) ]
-                            ++ map writePLE (pathListEntries pl)
-                            ++ [ writePS  (pathStrings     pl) ]
-
-    writePLE :: PathListEntry -> ByteString
-    writePLE = dump unpack [ pathOffset, pathLength ]
-
-    writePS = id
-
-    dump :: (a -> ByteString) -> [(r -> a)] -> r -> ByteString
-    dump fc fs r = B.concat $ map fc $ map (flip ($) r) $ fs
-
-    unpack :: (Bits a, Integral a) => a -> ByteString
-    unpack | isBigEndian = unpack'
-           | otherwise   = B.reverse . unpack'
-      where
-        unpack' :: (Bits a, Integral a) => a -> ByteString
-        unpack' x = B.pack $ map f $ reverse [ 0 .. byteSize x - 1 ]
-          where f s = fromIntegral $ shiftR x (8 * s)
-
-        byteSize :: Bits a => a -> Int
-        byteSize = (`div` 8) . bitSize
 
     isBigEndian :: Bool
     isBigEndian = getSystemEndianness == BigEndian

@@ -24,12 +24,16 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 library
-  exposed-modules:     Data.RAF
+  exposed-modules:     Data.RAF,
+                       Data.RAF.Abstract,
+                       Data.RAF.Combined,
+                       Data.RAF.LowLevel
   hs-source-dirs:      src
   build-depends:       attoparsec        == 0.10.*,
                        attoparsec-binary == 0.1.*,
                        base              == 4.5.*,
                        bytestring        == 0.9.*,
+                       containers        == 0.4.*,
                        cpu               == 0.1.*
   ghc-options:         -Wall
 

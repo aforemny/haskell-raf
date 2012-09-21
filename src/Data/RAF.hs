@@ -1,3 +1,4 @@
+{-# LANGUAGE DoRec #-}
 -- | This module provides some low level abstraction on Riot Archive Format
 -- (RAF) files. This format is used by Riot Games Inc. most notably in their
 -- game League of Legends. In case you are looking for a library to deal with
@@ -29,6 +30,7 @@ module Data.RAF
 import           Prelude hiding (take)
 
 import           Control.Applicative
+import           Control.Monad
 import           Data.Attoparsec.Binary
 import           Data.Attoparsec      (Parser)
 import           Data.Bits
@@ -38,6 +40,8 @@ import           System.Endian
 
 import qualified Data.ByteString as B
 import qualified Data.Attoparsec as A
+
+import System.IO.Unsafe
 
 data RAF = RAF
     { magicNumber     :: Word32
@@ -55,10 +59,10 @@ data FileList = FileList
     } deriving (Show)
 
 data FileEntry = FileEntry
-    { fileEntryHash          :: ByteString
-    , fileEntryDataOffset    :: Word32
-    , fileEntryDataSize      :: Word32
-    , fileEntryPathListIndex :: Word32
+    { pathHash      :: ByteString
+    , dataOffset    :: Word32
+    , dataSize      :: Word32
+    , pathListIndex :: Word32
     } deriving (Show)
 
 data PathList = PathList
@@ -77,38 +81,41 @@ parseFromFile :: FilePath -> IO (Either String RAF)
 parseFromFile fn = parse <$> B.readFile fn
 
 parse :: ByteString -> Either String RAF
-parse = A.parseOnly raf
+parse bs = do
+    -- TODO: Recursive Do
+    partial <- A.parseOnly raf bs
+    let flOffset = fileListOffset $ partial undefined undefined
+        plOffset = pathListOffset $ partial undefined undefined
+    fileList <- A.parseOnly fileList $ B.drop (fromIntegral $ flOffset) bs
+    pathList <- A.parseOnly pathList $ B.drop (fromIntegral $ plOffset) bs
+    return $ partial fileList pathList
   where
-    raf = do
-        magicNumber    <- word32 0x18be0ef0
-        version        <- anyWord32
-        managerIndex   <- anyWord32
-        fileListOffset <- anyWord32
-        pathListOffset <- anyWord32
-        let fileListSkip = fromIntegral fileListOffset - 20
-        _              <- A.take fileListSkip
-        fileList       <- fileList
-        let pathListSkip = fromIntegral pathListOffset
-                         - (24 + 20 * (fromIntegral $ numberOfEntries fileList))
-        _              <- A.take pathListSkip
-        pathList       <- pathList
-        return $ RAF magicNumber version managerIndex fileListOffset
-                     pathListOffset fileList pathList
+    raf :: Parser (FileList -> PathList -> RAF)
+    raf = RAF <$> (word32 0x18be0ef0)
+              <*> anyWord32 <*> anyWord32
+              <*> anyWord32 <*> anyWord32
 
     fileList = do
         numberOfEntries <- anyWord32
-        fileEntries     <- A.count (fromIntegral numberOfEntries) fileEntry
-        return $ FileList numberOfEntries fileEntries
+        FileList numberOfEntries <$> A.count (fromIntegral numberOfEntries)
+                                             (fileEntry numberOfEntries)
 
-    fileEntry = FileEntry <$> take 4 <*> anyWord32 <*> anyWord32 <*> anyWord32
+    fileEntry numberOfEntries = do
+        pathHash      <- take 4
+        dataOffset    <- anyWord32
+        dataSize      <- anyWord32
+        pathListIndex <- anyWord32
+        guard (pathListIndex < numberOfEntries)
+        return $ FileEntry pathHash dataOffset dataSize pathListIndex
 
     pathList = do
         pathListSize    <- anyWord32
-        pathListCount   <- fromIntegral <$> anyWord32
+        pathListCount   <- anyWord32
         pathListEntries <- A.count (fromIntegral pathListCount) pathListEntry
         pathStrings     <- A.takeWhile (const True)
         return $ PathList pathListSize pathListCount pathListEntries
                           pathStrings
+
     pathListEntry = PathListEntry <$> anyWord32 <*> anyWord32
 
     take :: Int -> Parser ByteString
@@ -123,15 +130,51 @@ parse = A.parseOnly raf
     word32 w | isBigEndian = word32be w
              | otherwise   = word32le w
 
-    pack :: Bits a => ByteString -> a
-    pack = B.foldl' (\n h -> (n `shiftL` 8) .|. fromIntegral h) 0
+    isBigEndian :: Bool
+    isBigEndian = getSystemEndianness == BigEndian
+
+writeToFile :: FilePath -> RAF -> IO ()
+writeToFile fn = B.writeFile fn . write
+
+write :: RAF -> ByteString
+write raf = B.concat
+    $ map (unpack . flip ($) raf) [ magicNumber, version, managerIndex
+                                  , fileListOffset, pathListOffset ]
+    ++ [writeFL (fileList raf), writePL (pathList raf)]
+  where
+    writeFL :: FileList -> ByteString
+    writeFL fl = B.concat $ [ unpack (numberOfEntries fl) ]
+                         ++ map writeFE (fileEntries fl)
+
+    writeFE :: FileEntry -> ByteString
+    writeFE fe = B.concat [ pathHash fe
+                          , dump unpack [ dataOffset, dataSize, pathListIndex ]
+                            fe ]
+
+    writePL :: PathList -> ByteString
+    writePL pl = B.concat $ [ unpack   (pathListSize    pl)
+                            , unpack   (pathListCount   pl) ]
+                            ++ map writePLE (pathListEntries pl)
+                            ++ [ writePS  (pathStrings     pl) ]
+
+    writePLE :: PathListEntry -> ByteString
+    writePLE = dump unpack [ pathOffset, pathLength ]
+
+    writePS = id
+
+    dump :: (a -> ByteString) -> [(r -> a)] -> r -> ByteString
+    dump fc fs r = B.concat $ map fc $ map (flip ($) r) $ fs
 
     unpack :: (Bits a, Integral a) => a -> ByteString
-    unpack x = B.pack $ map f $ reverse [ 0 .. byteSize x - 1 ]
-      where f s = fromIntegral $ shiftR x (8 * s)
+    unpack | isBigEndian = unpack'
+           | otherwise   = B.reverse . unpack'
+      where
+        unpack' :: (Bits a, Integral a) => a -> ByteString
+        unpack' x = B.pack $ map f $ reverse [ 0 .. byteSize x - 1 ]
+          where f s = fromIntegral $ shiftR x (8 * s)
 
-    byteSize :: Bits a => a -> Int
-    byteSize = (`div` 8) . bitSize
+        byteSize :: Bits a => a -> Int
+        byteSize = (`div` 8) . bitSize
 
     isBigEndian :: Bool
     isBigEndian = getSystemEndianness == BigEndian

@@ -9,6 +9,9 @@ files are stored in seperate .RAF.DAT files.  The .RAF maps file names to
 offsets which map to binary data of these files.  All .RAF files are encoded in
 little endian.
 
+A description of the file format can be found in the League of Legends Wiki:
+<http://leagueoflegends.wikia.com/wiki/RAF:_Riot_Archive_File>
+
 Features
 --------
 

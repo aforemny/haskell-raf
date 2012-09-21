@@ -23,8 +23,11 @@ module Data.RAF
     , FileEntry(..)
     , PathListEntry(..)
 
-    , parse
     , parseFromFile
+    , parse
+
+    , writeToFile
+    , write
 
     ) where
 
